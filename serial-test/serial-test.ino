@@ -1,7 +1,11 @@
 void setup()
 {
-  Serial.begin(115200);
   delay(3000);  //5 seconds delay for enabling to see the start up comments on the serial board
+  Serial.end();
+  Serial.begin(115200);
+  while(Serial.available()){
+	  Serial.read();
+  }
   Serial.println("Sketch started");
 }
 
