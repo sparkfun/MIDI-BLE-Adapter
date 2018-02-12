@@ -9,30 +9,33 @@
 
 uint8_t msgBuf[5] = {0x80, 0x80, 0x90, 0x40, 0x40};
 
+unsigned long msOffset = 0;
+#define MAX_MS 0x01FFF //13 bits, 8192 dec
+
 // create peripheral instance, see pinouts above
-const char * localName = "nRF52832 MIDI2";
+const char * localName = "nRF52832 MIDI";
 BLEPeripheral blePeripheral;
 BLEService service("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
 BLECharacteristic characteristic("7772E5DB-3868-4112-A1A9-F2669D106BF3", BLERead | BLEWriteWithoutResponse | BLENotify, 20 );
-BLEDescriptor descriptor = BLEDescriptor("2901", "value");
+BLEDescriptor descriptor = BLEDescriptor("2902", 0);
 
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial, midiA);
 
-void handleNoteOn(byte channel, byte pitch, byte velocity)
-{
-	msgBuf[2] = 0x09 & channel;
-	msgBuf[3] = pitch;
-	msgBuf[4] = velocity;
-	characteristic.setValue(msgBuf, 5);
-}
-
-void handleNoteOff(byte channel, byte pitch, byte velocity)
-{
-	msgBuf[2] = 0x08 & channel;
-	msgBuf[3] = pitch;
-	msgBuf[4] = velocity;
-	characteristic.setValue(msgBuf, 5);
-}
+//void handleNoteOn(byte channel, byte pitch, byte velocity)
+//{
+//	msgBuf[2] = 0x09 & channel;
+//	msgBuf[3] = pitch;
+//	msgBuf[4] = velocity;
+//	characteristic.setValue(msgBuf, 5);
+//}
+//
+//void handleNoteOff(byte channel, byte pitch, byte velocity)
+//{
+//	msgBuf[2] = 0x08 & channel;
+//	msgBuf[3] = pitch;
+//	msgBuf[4] = velocity;
+//	characteristic.setValue(msgBuf, 5);
+//}
 
 void setup() {
 	delay(1000);
@@ -47,8 +50,8 @@ void setup() {
 	setupBLE();
 	
 	// begin initialization
-	midiA.setHandleNoteOn(handleNoteOn);
-	midiA.setHandleNoteOff(handleNoteOff);
+	//midiA.setHandleNoteOn(handleNoteOn);
+	//midiA.setHandleNoteOff(handleNoteOff);
 
 	// Initiate MIDI communications, listen to all channels
 	midiA.begin(MIDI_CHANNEL_OMNI);
@@ -63,7 +66,7 @@ void setup() {
 	midiA.sendNoteOff(42, 66, 1); 
 	digitalWrite(RED_STAT_PIN, 1);
 	//midiA.turnThruOn();
-	//midiA.turnThruOff();
+	midiA.turnThruOff();
 
 }
 
@@ -78,12 +81,14 @@ void loop()
 		digitalWrite(GREEN_STAT_PIN, 1);
 	}
 	if (central) {
+		//Prep the timestamp
+		msOffset = millis();
+		
 		digitalWrite(LED_PIN, 0);
 		// central connected to peripheral
 
 		while (central.connected()) {
 			digitalWrite(GREEN_STAT_PIN, 0);
-			midiA.read();
 			if(digitalRead(BTN_PIN) == 0){
 				digitalWrite(GREEN_STAT_PIN, 1);
 				midiA.sendNoteOff(0x44, 80, 1);
@@ -95,6 +100,7 @@ void loop()
 				processPacket();
 				digitalWrite(RED_STAT_PIN, 1); 
 			}
+			parseMIDIonDIN();
 		}
 
 	}
@@ -138,22 +144,22 @@ void processPacket()
 			//If not System Common or System Real-Time, send it as running status
 			switch( buffer[lPtr] & 0xF0 )
 			{
-				case 0x80:
-				case 0x90:
-				case 0xA0:
-				case 0xB0:
-				case 0xE0:
-					for(int i = lPtr; i < rPtr; i = i + 2){
-						transmitMIDIonDIN( lastStatus, buffer[i + 1], buffer[i + 2] );
-					}
+			case 0x80:
+			case 0x90:
+			case 0xA0:
+			case 0xB0:
+			case 0xE0:
+				for(int i = lPtr; i < rPtr; i = i + 2){
+					transmitMIDIonDIN( lastStatus, buffer[i + 1], buffer[i + 2] );
+				}
 				break;
-				case 0xC0:
-				case 0xD0:
-					for(int i = lPtr; i < rPtr; i = i + 1){
-						transmitMIDIonDIN( lastStatus, buffer[i + 1], 0 );
-					}
+			case 0xC0:
+			case 0xD0:
+				for(int i = lPtr; i < rPtr; i = i + 1){
+					transmitMIDIonDIN( lastStatus, buffer[i + 1], 0 );
+				}
 				break;
-				default:
+			default:
 				break;
 			}
 		}
@@ -200,6 +206,202 @@ void transmitMIDIonDIN( uint8_t status, uint8_t data1, uint8_t data2 )
 		break;
 	}	
 }
+//	msgBuf[2] = 0x09 & channel;
+//	msgBuf[3] = pitch;
+//	msgBuf[4] = velocity;
+//	characteristic.setValue(msgBuf, 5);
+void parseMIDIonDIN()
+{
+	unsigned long currentMillis = millis();
+	if(currentMillis < 5000){
+		if(msOffset > 5000){
+			//it's been 49 days, millis rolled.
+			while(msOffset > 5000){
+				//roll msOffset - this should preserve current ~8 second count.
+				msOffset += MAX_MS;
+			}
+		}
+	}
+	while(currentMillis >= (unsigned long)(msOffset + MAX_MS)){
+		msOffset += MAX_MS;
+	}
+	unsigned long currentTimeStamp = currentMillis - msOffset;
+	msgBuf[0] = ((currentTimeStamp >> 7) & 0x3F) | 0x80; //6 bits plus MSB
+	msgBuf[1] = (currentTimeStamp & 0x7F) | 0x80; //7 bits plus MSB
+	if (  midiA.read())
+	{
+		digitalWrite(RED_STAT_PIN, 0);
+		uint8_t statusByte = ((uint8_t)midiA.getType() | ((midiA.getChannel() - 1) & 0x0f));
+		switch (midiA.getType())
+		{
+		case midi::NoteOff :
+		case midi::NoteOn :
+			msgBuf[2] = statusByte;
+            msgBuf[3] = midiA.getData1();
+			msgBuf[4] = midiA.getData2();
+			characteristic.setValue(msgBuf, 5);
+			break;
+		case midi::AfterTouchPoly :
+//			{
+//				Serial.print("PolyAT, chan: ");
+//				Serial.print(midiA.getChannel());
+//				Serial.print(" Note#: ");
+//				Serial.print(midiA.getData1());
+//				Serial.print(" AT: ");
+//				Serial.println(midiA.getData2());
+//			}
+			break;
+		case midi::ControlChange :
+//			{
+//				Serial.print("Controller, chan: ");
+//				Serial.print(midiA.getChannel());
+//				Serial.print(" Controller#: ");
+//				Serial.print(midiA.getData1());
+//				Serial.print(" Value: ");
+//				Serial.println(midiA.getData2());
+//			}
+			break;
+		case midi::ProgramChange :
+//			{
+//				Serial.print("PropChange, chan: ");
+//				Serial.print(midiA.getChannel());
+//				Serial.print(" program: ");
+//				Serial.println(midiA.getData1());
+//			}
+			break;
+		case midi::AfterTouchChannel :
+//			{
+//				Serial.print("ChanAT, chan: ");
+//				Serial.print(midiA.getChannel());
+//				Serial.print(" program: ");
+//				Serial.println(midiA.getData1());
+//
+//			}
+			break;
+		case midi::PitchBend :
+//			{
+//				uint16_t val;
+//
+//				Serial.print("Bend, chan: ");
+//				Serial.print(midiA.getChannel());
+//
+//				// concatenate MSB,LSB
+//				// LSB is Data1
+//				val = midiA.getData2() << 7 | midiA.getData1();
+//
+//				Serial.print(" value: 0x");
+//				Serial.println(val, HEX);
+//
+//
+//			}
+			break;
+		case midi::SystemExclusive :
+//			{
+//				// Sysex is special.
+//				// could contain very long data...
+//				// the data bytes form the length of the message,
+//				// with data contained in array member
+//				uint16_t length;
+//				const uint8_t  * data_p;
+//
+//				Serial.print("SysEx, chan: ");
+//				Serial.print(midiA.getChannel());
+//				length = midiA.getSysExArrayLength();
+//
+//				Serial.print(" Data: 0x");
+//				data_p = midiA.getSysExArray();
+//				for (uint16_t idx = 0; idx < length; idx++)
+//				{
+//					Serial.print(data_p[idx], HEX);
+//					Serial.print(" 0x");
+//				}
+//				Serial.println();
+//			}
+			break;
+		case midi::TimeCodeQuarterFrame :
+//			{
+//				// MTC is also special...
+//				// 1 byte of data carries 3 bits of field info 
+//				//      and 4 bits of data (sent as MS and LS nybbles)
+//				// It takes 2 messages to send each TC field,
+//				
+//				Serial.print("TC 1/4Frame, type: ");
+//				Serial.print(midiA.getData1() >> 4);
+//				Serial.print("Data nybble: ");
+//				Serial.println(midiA.getData1() & 0x0f);
+//			}
+			break;
+		case midi::SongPosition :
+//			{
+//				// Data is the number of elapsed sixteenth notes into the song, set as 
+//				// 7 seven-bit values, LSB, then MSB.
+//				
+//				Serial.print("SongPosition ");
+//				Serial.println(midiA.getData2() << 7 | midiA.getData1());
+//			}
+			break;
+		case midi::SongSelect :
+//			{
+//				Serial.print("SongSelect ");
+//				Serial.println(midiA.getData1());
+//			}
+			break;
+		case midi::TuneRequest :
+//			{
+//				Serial.println("Tune Request");
+//			}
+			break;
+		case midi::Clock :
+//			{
+//				ticks++;
+//
+//				Serial.print("Clock ");
+//				Serial.println(ticks);
+//			}
+			break;
+		case midi::Start :
+//			{
+//				ticks = 0;
+//				Serial.println("Starting");
+//			}
+			break;
+		case midi::Continue :
+//			{
+//				ticks = old_ticks;
+//				Serial.println("continuing");
+//			}
+			break;
+		case midi::Stop :
+//			{
+//				old_ticks = ticks;
+//				Serial.println("Stopping");
+//			}
+			break;
+		case midi::ActiveSensing :
+//			{
+//				Serial.println("ActiveSense");
+//			}
+			break;
+		case midi::SystemReset :
+//			{
+//				Serial.println("Stopping");
+//			}
+			break;
+		case midi::InvalidType :
+//			{
+//				Serial.println("Invalid Type");
+//			}
+			break;
+		default:
+//			{
+//				Serial.println();
+//			}
+			break;
+		}
+		digitalWrite(RED_STAT_PIN, 1);
+	}
+
+}
 
 void setupBLE()
 {
@@ -215,28 +417,28 @@ void setupBLE()
 	characteristic.setValue(0);
 
 	// set event handlers
-	characteristic.setEventHandler(BLEWritten, BLEWrittenCallback);
-	characteristic.setEventHandler(BLESubscribed, BLESubscribedCallback);
-	characteristic.setEventHandler(BLEUnsubscribed, BLEUnsubscribedCallback);
+	//characteristic.setEventHandler(BLEWritten, BLEWrittenCallback);
+	//characteristic.setEventHandler(BLESubscribed, BLESubscribedCallback);
+	//characteristic.setEventHandler(BLEUnsubscribed, BLEUnsubscribedCallback);
 
 	blePeripheral.begin();
 }
 
-// callback signature
-void BLEWrittenCallback(BLECentral& central, BLECharacteristic& characteristic) {
-	// ....
-
-}
-
-// callback signature
-void BLESubscribedCallback(BLECentral& central, BLECharacteristic& characteristic) {
-	// ....
-
-}
-
-// callback signature
-void BLEUnsubscribedCallback(BLECentral& central, BLECharacteristic& characteristic) {
-	// ....
-
-}
-//    event - BLEWritten, BLESubscribed, or BLEUnsubscribed
+//// callback signature
+//void BLEWrittenCallback(BLECentral& central, BLECharacteristic& characteristic) {
+//	// ....
+//
+//}
+//
+//// callback signature
+//void BLESubscribedCallback(BLECentral& central, BLECharacteristic& characteristic) {
+//	// ....
+//
+//}
+//
+//// callback signature
+//void BLEUnsubscribedCallback(BLECentral& central, BLECharacteristic& characteristic) {
+//	// ....
+//
+//}
+////    event - BLEWritten, BLESubscribed, or BLEUnsubscribed
