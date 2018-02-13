@@ -59,12 +59,18 @@ The hookup guide recommends a library to do the BLE stuff, written by Sandeep [B
 [FortySevenEffects Midi Library](https://github.com/FortySevenEffects/arduino_midi_library) is used for some of the midi decoding.
 
 **Status**
-* BLE -> MIDI port: Fully decoding all packet sizes, TX all but system
-* MIDI -> BLE: Only note on/off messages
+* BLE -> DIN:
+  * Channel Messages OK
+  * System Common OK
+  * SysEx ignored
+* DIN -> BLE:
+  * Channel Messages OK
+  * System Common OK
+  * SysEx ignored
 
 **Bugs / Future Work**
-* BLE name doesn't hold, reverts to "Arduino" for some reason.
 * Serial port locks at boot sometimes, needs reset button press.
+* When uploading a lot of tests, sometimes connection won't hold - connecting other devices sometimes resolves this.
 
 **Programming tips**
 * Use the side of a pen to push reset and button for bootloader
