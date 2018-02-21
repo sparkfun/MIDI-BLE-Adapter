@@ -88,16 +88,24 @@ void transmitMIDIonDIN( uint8_t status, uint8_t data1, uint8_t data2 ){
 	Serial.println();
 }
 
-//This is the UUT function
+//******This is the UUT******
+
+//This function decodes the BLE characteristics and calls transmitMIDIonDIN
+//if the packet contains sendable MIDI data.
 void processPacket()
 {
+	//Receive the written packet and parse it out here.
 	uint8_t * buffer = (uint8_t*)characteristic.value();
 	uint8_t bufferSize = characteristic.valueLength();
+
+	//Pointers used to search through payload.
 	uint8_t lPtr = 0;
 	uint8_t rPtr = 0;
+	//lastStatus used to capture runningStatus 
 	uint8_t lastStatus;
 	//Decode first packet -- SHALL be "Full MIDI message"
 	lPtr = 2; //Start at first MIDI status -- SHALL be "MIDI status"
+	//While statement contains incrementing pointers and breaks when buffer size exceeded.
 	while(1){
 		lastStatus = buffer[lPtr];
 		if( (buffer[lPtr] < 0x80) ){
@@ -109,12 +117,10 @@ void processPacket()
 		while( (buffer[rPtr + 1] < 0x80)&&(rPtr < (bufferSize - 1)) ){
 			rPtr++;
 		}
-		//Serial.print("lPtr: ");
-		//Serial.print(lPtr);
-		//Serial.print(", rPtr: ");
-		//Serial.println(rPtr);
+		//look at l and r pointers and decode by size.
 		if( rPtr - lPtr < 1 ){
 			//Time code or system
+			transmitMIDIonDIN( lastStatus, 0, 0 );
 		} else if( rPtr - lPtr < 2 ) {
 			transmitMIDIonDIN( lastStatus, buffer[lPtr + 1], 0 );
 		} else if( rPtr - lPtr < 3 ) {
@@ -124,22 +130,22 @@ void processPacket()
 			//If not System Common or System Real-Time, send it as running status
 			switch( buffer[lPtr] & 0xF0 )
 			{
-				case 0x80:
-				case 0x90:
-				case 0xA0:
-				case 0xB0:
-				case 0xE0:
-					for(int i = lPtr; i < rPtr; i = i + 2){
-						transmitMIDIonDIN( lastStatus, buffer[i + 1], buffer[i + 2] );
-					}
+			case 0x80:
+			case 0x90:
+			case 0xA0:
+			case 0xB0:
+			case 0xE0:
+				for(int i = lPtr; i < rPtr; i = i + 2){
+					transmitMIDIonDIN( lastStatus, buffer[i + 1], buffer[i + 2] );
+				}
 				break;
-				case 0xC0:
-				case 0xD0:
-					for(int i = lPtr; i < rPtr; i = i + 1){
-						transmitMIDIonDIN( lastStatus, buffer[i + 1], 0 );
-					}
+			case 0xC0:
+			case 0xD0:
+				for(int i = lPtr; i < rPtr; i = i + 1){
+					transmitMIDIonDIN( lastStatus, buffer[i + 1], 0 );
+				}
 				break;
-				default:
+			default:
 				break;
 			}
 		}

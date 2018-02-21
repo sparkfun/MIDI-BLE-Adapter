@@ -1,18 +1,23 @@
 
 ## BLE MIDI convertor
-This repository is for code that converts BLE midi into DIN midi.
+This repository is for code that converts BLE midi into DIN midi.  It is discussed in the SparkFun [MIDI BLE Tutorial](https://learn.sparkfun.com/tutorials/midi-ble-tutorial)
 
 **Contents**
-* ble-test -- simple rx of BLE packets, prints sizes
-* documentation -- Right now, only output of ble-test during Tsunami app transmission
-* midi-test -- simple TX of midi messages over DIN
-* parserUnitTest -- Exercise of BLE MIDI packet decoder
-* serial-test -- Simple serial test
 * standard-midi-ble -- The main application to create a BLE MIDI dongle.
-* 
+* ble-to-din -- Just the BLE packet parser to serial MIDI out
+* din-to-ble -- Just the serial MIDI in to BLE packet builder
+* midi-lib-starter -- an empty shell with MIDI and BLE configured
+* ble-starter -- an empty shell with just BLE configured
+* test-programs
+  * ble-test -- simple rx of BLE packets, prints sizes
+  * midi-test -- simple TX of midi messages over DIN
+  * parserUnitTest -- Exercise of BLE MIDI packet decoder
+  * serial-test -- Simple serial test
+* documentation -- Right now, only output of ble-test during Tsunami app transmission
+
 ### Hardware requirements
 * nRF52832 Breakout
-* MIDI shield -- only populate MIDI headers.
+* MIDI shield -- only populate MIDI jacks.
 
 Connections:
 <table>
@@ -48,30 +53,21 @@ Connections:
 
 ### Software
 **Requirements**
-* nRF52832 Arduino board package
-* BLE library
-* MIDI library
-
-The sparkfun nRF52 comes programed with a bootloader and has arduino board files for it, see [nRF52832 Breakout Hookup Guide](https://learn.sparkfun.com/tutorials/nrf52832-breakout-board-hookup-guide)
-
-The hookup guide recommends a library to do the BLE stuff, written by Sandeep [BLE library](https://github.com/sandeepmistry/arduino-BLEPeripheral/) which contains a document on api calls: [API doc](https://github.com/sandeepmistry/arduino-BLEPeripheral/blob/master/API.md)
-
-[FortySevenEffects Midi Library](https://github.com/FortySevenEffects/arduino_midi_library) is used for some of the midi decoding.
+* nRF52832 Arduino board package -- see [nRF52832 Breakout Hookup Guide](https://learn.sparkfun.com/tutorials/nrf52832-breakout-board-hookup-guide)
+* [BLE library](https://github.com/sandeepmistry/arduino-BLEPeripheral/) -- [API doc](https://github.com/sandeepmistry/arduino-BLEPeripheral/blob/master/API.md)
+* [FortySevenEffects Midi Library](https://github.com/FortySevenEffects/arduino_midi_library) 
 
 **Status**
-* BLE -> DIN:
-  * Channel Messages OK
-  * System Common OK
+* BLE to Serial MIDI
+  * Decodes all forms of BLE MIDI data
   * SysEx ignored
-* DIN -> BLE:
-  * Channel Messages OK
-  * System Common OK
+  * BLE timestamps ignored
+* Serial MIDI to BLE
+  * Converts all MIDI messages to Full type
+  * Applys timestamp
   * SysEx ignored
 
 **Bugs / Future Work**
 * Serial port locks at boot sometimes, needs reset button press.
-* When uploading a lot of tests, sometimes connection won't hold - connecting other devices sometimes resolves this.
+* When uploading a lot of tests, sometimes connection won't hold - connecting other devices sometimes resolves this, or try renaming the device in firmware.
 
-**Programming tips**
-* Use the side of a pen to push reset and button for bootloader
-* make sure switch is on "PROG" to connect MIDI IN to RX pin

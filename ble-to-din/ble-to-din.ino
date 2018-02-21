@@ -63,6 +63,9 @@ void loop()
 		digitalWrite(GREEN_STAT_PIN, 1);
 	}
 	if (central) {
+		//Prep the timestamp
+		msOffset = millis();
+		
 		digitalWrite(BLUE_STAT_PIN, 0);
 		// central connected to peripheral
 
@@ -82,8 +85,6 @@ void loop()
 				processPacket();
 				digitalWrite(RED_STAT_PIN, 1); 
 			}
-			//Check if data exists coming in from the serial port
-			parseMIDIonDIN();
 		}
 	}
 	//No longer connected.  Turn off the LEDs.
@@ -230,125 +231,10 @@ void transmitMIDIonDIN( uint8_t status, uint8_t data1, uint8_t data2 )
 	}	
 }
 
-//This function is called to check if MIDI data has come in through the serial port.  If found, it builds a characteristic buffer and sends it over BLE.
-void parseMIDIonDIN()
-{
-	uint8_t msgBuf[5]; //Outgoing buffer
-
-	//Calculate timestamp.
-	uint16_t currentTimeStamp = millis() & 0x01FFF;
-	
-	msgBuf[0] = ((currentTimeStamp >> 7) & 0x3F) | 0x80; //6 bits plus MSB
-	msgBuf[1] = (currentTimeStamp & 0x7F) | 0x80; //7 bits plus MSB
-	
-	//Check MIDI object for new data.
-	if (  MIDI.read())
-	{
-		digitalWrite(RED_STAT_PIN, 0);
-		uint8_t statusByte = ((uint8_t)MIDI.getType() | ((MIDI.getChannel() - 1) & 0x0f));
-		switch (MIDI.getType())
-		{
-			//2 Byte Channel Messages
-			case midi::NoteOff :
-			case midi::NoteOn :
-			case midi::AfterTouchPoly :
-			case midi::ControlChange :
-			case midi::PitchBend :
-				msgBuf[2] = statusByte;
-				msgBuf[3] = MIDI.getData1();
-				msgBuf[4] = MIDI.getData2();
-				characteristic.setValue(msgBuf, 5);
-				break;
-			//1 Byte Channel Messages
-			case midi::ProgramChange :
-			case midi::AfterTouchChannel :
-				msgBuf[2] = statusByte;
-				msgBuf[3] = MIDI.getData1();
-				characteristic.setValue(msgBuf, 4);
-				break;
-			//System Common Messages
-			case midi::TimeCodeQuarterFrame :
-				msgBuf[2] = 0xF1;
-				msgBuf[3] = MIDI.getData1();
-				characteristic.setValue(msgBuf, 4);
-				break;
-			case midi::SongPosition :
-				msgBuf[2] = 0xF2;
-				msgBuf[3] = MIDI.getData1();
-				msgBuf[4] = MIDI.getData2();
-				characteristic.setValue(msgBuf, 5);
-				break;
-			case midi::SongSelect :
-				msgBuf[2] = 0xF3;
-				msgBuf[3] = MIDI.getData1();
-				characteristic.setValue(msgBuf, 4);
-				break;
-			case midi::TuneRequest :
-				msgBuf[2] = 0xF6;
-				characteristic.setValue(msgBuf, 3);
-				break;
-				//Real-time Messages
-			case midi::Clock :
-				msgBuf[2] = 0xF8;
-				characteristic.setValue(msgBuf, 3);
-				break;
-			case midi::Start :
-				msgBuf[2] = 0xFA;
-				characteristic.setValue(msgBuf, 3);
-				break;
-			case midi::Continue :
-				msgBuf[2] = 0xFB;
-				characteristic.setValue(msgBuf, 3);
-				break;
-			case midi::Stop :
-				msgBuf[2] = 0xFC;
-				characteristic.setValue(msgBuf, 3);
-				break;
-			case midi::ActiveSensing :
-				msgBuf[2] = 0xFE;
-				characteristic.setValue(msgBuf, 3);
-				break;
-			case midi::SystemReset :
-				msgBuf[2] = 0xFF;
-				characteristic.setValue(msgBuf, 3);
-				break;
-			//SysEx
-			case midi::SystemExclusive :
-//				{
-//					// Sysex is special.
-//					// could contain very long data...
-//					// the data bytes form the length of the message,
-//					// with data contained in array member
-//					uint16_t length;
-//					const uint8_t  * data_p;
-//	
-//					Serial.print("SysEx, chan: ");
-//					Serial.print(MIDI.getChannel());
-//					length = MIDI.getSysExArrayLength();
-//	
-//					Serial.print(" Data: 0x");
-//					data_p = MIDI.getSysExArray();
-//					for (uint16_t idx = 0; idx < length; idx++)
-//					{
-//						Serial.print(data_p[idx], HEX);
-//						Serial.print(" 0x");
-//					}
-//					Serial.println();
-//				}
-				break;
-			case midi::InvalidType :
-			default:
-				break;
-		}
-		digitalWrite(RED_STAT_PIN, 1);
-	}
-
-}
-
 void setupBLE()
 {
-	blePeripheral.setLocalName("nRF52832 MIDI"); //local name sometimes used by central
-	blePeripheral.setDeviceName("nRF52832 MIDI"); //device name sometimes used by central
+	blePeripheral.setLocalName("BLE to DIN"); //local name sometimes used by central
+	blePeripheral.setDeviceName("BLE to DIN"); //device name sometimes used by central
 	//blePeripheral.setApperance(0x0000); //default is 0x0000, what should this be?
 	blePeripheral.setAdvertisedServiceUuid(service.uuid()); //Advertise MIDI UUID
 
