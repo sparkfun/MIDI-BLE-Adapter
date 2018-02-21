@@ -1,5 +1,4 @@
-
-## BLE MIDI convertor
+## BLE MIDI Converter
 This repository is for code that converts BLE midi into DIN midi.  It is discussed in the SparkFun [MIDI BLE Tutorial](https://learn.sparkfun.com/tutorials/midi-ble-tutorial)
 
 **Contents**
@@ -64,7 +63,7 @@ Connections:
   * BLE timestamps ignored
 * Serial MIDI to BLE
   * Converts all MIDI messages to Full type
-  * Applys timestamp
+  * Applies timestamp
   * SysEx ignored
 
 **Bugs / Future Work**
